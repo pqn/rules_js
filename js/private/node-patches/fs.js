@@ -70,7 +70,7 @@ const patcher = (fs = _fs, roots) => {
     const origRealpathNative = fs.realpath.native;
     const origRealpathSync = fs.realpathSync.bind(fs);
     const origRealpathSyncNative = fs.realpathSync.native;
-    const isEscape = (0, exports.escapeFunction)(roots);
+    const isEscape = escapeFunction(roots);
     // =========================================================================
     // fs.lstat
     // =========================================================================
@@ -693,13 +693,17 @@ exports.patcher = patcher;
 // generic helper functions
 // =========================================================================
 function isSubPath(parent, child) {
-    return !path.relative(parent, child).startsWith('..');
+    return (parent === child ||
+        (child[parent.length] === path.sep && child.startsWith(parent)));
 }
 exports.isSubPath = isSubPath;
-const escapeFunction = (_roots) => {
-    // ensure roots are always absolute
-    _roots = _roots.map((root) => path.resolve(root));
-    function _isEscape(linkPath, linkTarget, roots = _roots) {
+function escapeFunction(_roots) {
+    // Ensure roots are always absolute.
+    // Sort to ensure escaping multiple roots chooses the longest one.
+    const defaultRoots = _roots
+        .map((root) => path.resolve(root))
+        .sort((a, b) => b.length - a.length);
+    return function fs_isEscape(linkPath, linkTarget, roots = defaultRoots) {
         // linkPath is the path of the symlink file itself
         // linkTarget is a path that the symlink points to one or more hops away
         if (!path.isAbsolute(linkPath)) {
@@ -708,25 +712,15 @@ const escapeFunction = (_roots) => {
         if (!path.isAbsolute(linkTarget)) {
             linkTarget = path.resolve(linkTarget);
         }
-        let escapedRoot = undefined;
         for (const root of roots) {
             // If the link is in the root check if the realPath has escaped
-            if (isSubPath(root, linkPath) || linkPath == root) {
-                if (!isSubPath(root, linkTarget) && linkTarget != root) {
-                    if (!escapedRoot || escapedRoot.length < root.length) {
-                        // if escaping multiple roots then choose the longest one
-                        escapedRoot = root;
-                    }
-                }
+            if (isSubPath(root, linkPath) && !isSubPath(root, linkTarget)) {
+                return root;
             }
         }
-        if (escapedRoot) {
-            return escapedRoot;
-        }
         return false;
-    }
-    return _isEscape;
-};
+    };
+}
 exports.escapeFunction = escapeFunction;
 function once(fn) {
     let called = false;
