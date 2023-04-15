@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 const assert = require('assert')
-const escapeFunction = require('../../node-patches/src/fs').escapeFunction
-const isSubPath = require('../../node-patches/src/fs').isSubPath
+const escapeFunction = require('../../node-patches/fs').escapeFunction
+const isSubPath = require('../../node-patches/fs').isSubPath
 
 // We don't want to bring jest into this repo so we just fake the describe and it functions here
 async function describe(_, fn) {
