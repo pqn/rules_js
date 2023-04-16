@@ -507,56 +507,42 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
     }
 
     function nextHop(loc: string, cb: (next: string | false) => void): void {
-        let nested: string[] = []
+        let maybe = loc
         let escapedHop: string | false = false
-        const oneHop = (maybe, cb: (next: string | false) => void) => {
-            origReadlink(maybe, (err: Error, str: string) => {
-                if (err) {
-                    if ((err as any).code === 'ENOENT') {
-                        // file does not exist
-                        return cb(undefined)
-                    }
-                    nested.push(path.basename(maybe))
-                    const dirname = path.dirname(maybe)
-                    if (
-                        !dirname ||
-                        dirname == maybe ||
-                        dirname == '.' ||
-                        dirname == '/'
-                    ) {
-                        // not a link
-                        return cb(escapedHop)
-                    }
-                    maybe = dirname
-                    return oneHop(maybe, cb)
-                }
-                if (!path.isAbsolute(str)) {
-                    str = path.resolve(path.dirname(maybe), str)
-                }
-                str = path.join(str, ...nested.reverse())
-                if (isEscape(loc, str)) {
-                    if (!escapedHop) {
-                        escapedHop = str
-                    }
-                    nested.push(path.basename(maybe))
-                    const dirname = path.dirname(maybe)
-                    if (
-                        !dirname ||
-                        dirname == maybe ||
-                        dirname == '.' ||
-                        dirname == '/'
-                    ) {
-                        // not a link
-                        return cb(escapedHop)
-                    }
-                    maybe = dirname
-                    return oneHop(maybe, cb)
-                } else {
-                    return cb(str)
-                }
-            })
-        }
-        oneHop(loc, cb)
+        let nested: string[] = []
+
+        readHopLink(maybe, function readNextHop(link) {
+            if (link === undefined) {
+                return cb(undefined)
+            }
+
+            if (link === HOP_NON_LINK) {
+                return cb(escapedHop)
+            }
+
+            link = path.join(link, ...nested.reverse())
+            if (!isEscape(loc, link)) {
+                return cb(link)
+            }
+
+            if (!escapedHop) {
+                escapedHop = link
+            }
+
+            nested.push(path.basename(maybe))
+            const dirname = path.dirname(maybe)
+            if (
+                !dirname ||
+                dirname == maybe ||
+                dirname == '.' ||
+                dirname == '/'
+            ) {
+                // not a link
+                return cb(escapedHop)
+            }
+            maybe = dirname
+            readHopLink(maybe, readNextHop)
+        })
     }
 
     const hopLinkCache = new Map<string, string | typeof HOP_NON_LINK>()
@@ -589,6 +575,32 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
         return link
     }
 
+    function readHopLink(
+        p: string,
+        cb: (l: string | typeof HOP_NON_LINK) => void
+    ) {
+        origReadlink(p, (err: Error, link: string) => {
+            if (err) {
+                if ((err as any).code === 'ENOENT') {
+                    // file does not exist
+                    return cb(undefined)
+                }
+
+                return cb(HOP_NON_LINK)
+            }
+
+            if (link === undefined) {
+                return cb(HOP_NON_LINK)
+            }
+
+            if (!path.isAbsolute(link)) {
+                link = path.resolve(path.dirname(p), link)
+            }
+
+            cb(link)
+        })
+    }
+
     function nextHopSync(loc: string): string | false {
         let nested: string[] = []
         let maybe = loc
@@ -596,6 +608,10 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
 
         for (;;) {
             let link = readHopLinkSync(maybe)
+
+            if (link === undefined) {
+                return escapedHop
+            }
 
             if (link !== HOP_NON_LINK) {
                 link = path.join(link, ...nested.reverse())
