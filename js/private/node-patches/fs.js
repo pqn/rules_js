@@ -536,9 +536,11 @@ const patcher = (fs = _fs, roots) => {
         catch (err) {
             if (err.code === 'ENOENT') {
                 // file does not exist
-                return undefined;
+                link = undefined;
             }
-            link = HOP_NON_LINK;
+            else {
+                link = HOP_NON_LINK;
+            }
         }
         hopLinkCache.set(p, link);
         return link;
@@ -549,12 +551,16 @@ const patcher = (fs = _fs, roots) => {
         }
         origReadlink(p, (err, link) => {
             if (err) {
+                let result;
                 if (err.code === 'ENOENT') {
                     // file does not exist
-                    return cb(undefined);
+                    result = undefined;
                 }
-                hopLinkCache.set(p, HOP_NON_LINK);
-                return cb(HOP_NON_LINK);
+                else {
+                    result = HOP_NON_LINK;
+                }
+                hopLinkCache.set(p, result);
+                return cb(result);
             }
             if (link === undefined) {
                 hopLinkCache.set(p, HOP_NON_LINK);

@@ -561,7 +561,10 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
         })
     }
 
-    const hopLinkCache = new Map<string, string | typeof HOP_NON_LINK>()
+    const hopLinkCache = new Map<
+        string,
+        string | undefined | typeof HOP_NON_LINK
+    >()
     function readHopLinkSync(p: string) {
         if (hopLinkCache.has(p)) {
             return hopLinkCache.get(p)
@@ -581,10 +584,10 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
         } catch (err) {
             if (err.code === 'ENOENT') {
                 // file does not exist
-                return undefined
+                link = undefined
+            } else {
+                link = HOP_NON_LINK
             }
-
-            link = HOP_NON_LINK
         }
 
         hopLinkCache.set(p, link)
@@ -601,13 +604,17 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
 
         origReadlink(p, (err: Error, link: string) => {
             if (err) {
+                let result: undefined | typeof HOP_NON_LINK
+
                 if ((err as any).code === 'ENOENT') {
                     // file does not exist
-                    return cb(undefined)
+                    result = undefined
+                } else {
+                    result = HOP_NON_LINK
                 }
 
-                hopLinkCache.set(p, HOP_NON_LINK)
-                return cb(HOP_NON_LINK)
+                hopLinkCache.set(p, result)
+                return cb(result)
             }
 
             if (link === undefined) {
