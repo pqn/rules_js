@@ -36,7 +36,7 @@ describe('escape function', () => {
 
     it('isEscape is correct', () => {
         const roots = ['/a/b', '/a/b/g/1', '/a/b/g/a/2', '/a/b/g/a/3']
-        const isEscape = escapeFunction(roots)
+        const { isEscape } = escapeFunction(roots)
 
         assert.ok(isEscape('/a/b/l', '/a/c/boop'))
         assert.ok(isEscape('/a/b', '/a/c/boop'))
@@ -80,7 +80,7 @@ describe('escape function', () => {
 
     it('isEscape handles relative paths', () => {
         const roots = ['./a/b', './a/b/g/1', './a/b/g/a/2', './a/b/g/a/3']
-        const isEscape = escapeFunction(roots)
+        const { isEscape } = escapeFunction(roots)
 
         assert.ok(isEscape('./a/b/l', './a/c/boop'))
         assert.ok(isEscape('./a/b', './a/c/boop'))

@@ -63,7 +63,7 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
     const origRealpathSync = fs.realpathSync.bind(fs)
     const origRealpathSyncNative = fs.realpathSync.native
 
-    const isEscape = escapeFunction(roots)
+    const { canEscape, isEscape } = escapeFunction(roots)
 
     // =========================================================================
     // fs.lstat
@@ -74,6 +74,10 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
 
         // preserve error when calling function without required callback
         if (!cb) {
+            return origLstat(...args)
+        }
+
+        if (!canEscape(args[0])) {
             return origLstat(...args)
         }
 
@@ -115,6 +119,10 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
     }
 
     fs.lstatSync = function lstatSync(...args: any[]) {
+        if (!canEscape(args[0])) {
+            return origLstatSync(...args)
+        }
+
         const stats = origLstatSync(...args)
 
         if (!stats.isSymbolicLink()) {
@@ -158,6 +166,10 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
             return origRealpath(...args)
         }
 
+        if (!canEscape(args[0])) {
+            return origRealpath(...args)
+        }
+
         cb = once(cb)
 
         args[args.length - 1] = (err: Error, str: string) => {
@@ -182,6 +194,10 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
 
         // preserve error when calling function without required callback
         if (!cb) {
+            return origRealpathNative(...args)
+        }
+
+        if (!canEscape(args[0])) {
             return origRealpathNative(...args)
         }
 
@@ -796,7 +812,7 @@ export function escapeFunction(_roots: string[]) {
         .map((root) => path.resolve(root))
         .sort((a, b) => b.length - a.length)
 
-    return function fs_isEscape(
+    function fs_isEscape(
         linkPath: string,
         linkTarget: string,
         roots = defaultRoots
@@ -820,6 +836,31 @@ export function escapeFunction(_roots: string[]) {
         }
 
         return false
+    }
+
+    function fs_canEscape(
+        maybeLinkPath: string,
+        roots = defaultRoots
+    ): boolean {
+        // maybeLinkPath is the path which may be a symlink
+
+        if (!path.isAbsolute(maybeLinkPath)) {
+            maybeLinkPath = path.resolve(maybeLinkPath)
+        }
+
+        for (const root of roots) {
+            // If the link is in the root check if the realPath has escaped
+            if (isSubPath(root, maybeLinkPath)) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    return {
+        isEscape: fs_isEscape,
+        canEscape: fs_canEscape,
     }
 }
 

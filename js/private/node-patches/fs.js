@@ -70,7 +70,7 @@ const patcher = (fs = _fs, roots) => {
     const origRealpathNative = fs.realpath.native;
     const origRealpathSync = fs.realpathSync.bind(fs);
     const origRealpathSyncNative = fs.realpathSync.native;
-    const isEscape = escapeFunction(roots);
+    const { canEscape, isEscape } = escapeFunction(roots);
     // =========================================================================
     // fs.lstat
     // =========================================================================
@@ -78,6 +78,9 @@ const patcher = (fs = _fs, roots) => {
         let cb = args.length > 1 ? args[args.length - 1] : undefined;
         // preserve error when calling function without required callback
         if (!cb) {
+            return origLstat(...args);
+        }
+        if (!canEscape(args[0])) {
             return origLstat(...args);
         }
         cb = once(cb);
@@ -113,6 +116,9 @@ const patcher = (fs = _fs, roots) => {
         origLstat(...args);
     };
     fs.lstatSync = function lstatSync(...args) {
+        if (!canEscape(args[0])) {
+            return origLstatSync(...args);
+        }
         const stats = origLstatSync(...args);
         if (!stats.isSymbolicLink()) {
             // the file is not a symbolic link so there is nothing more to do
@@ -147,6 +153,9 @@ const patcher = (fs = _fs, roots) => {
         if (!cb) {
             return origRealpath(...args);
         }
+        if (!canEscape(args[0])) {
+            return origRealpath(...args);
+        }
         cb = once(cb);
         args[args.length - 1] = (err, str) => {
             if (err)
@@ -165,6 +174,9 @@ const patcher = (fs = _fs, roots) => {
         let cb = args.length > 1 ? args[args.length - 1] : undefined;
         // preserve error when calling function without required callback
         if (!cb) {
+            return origRealpathNative(...args);
+        }
+        if (!canEscape(args[0])) {
             return origRealpathNative(...args);
         }
         cb = once(cb);
@@ -712,7 +724,7 @@ function escapeFunction(_roots) {
     const defaultRoots = _roots
         .map((root) => path.resolve(root))
         .sort((a, b) => b.length - a.length);
-    return function fs_isEscape(linkPath, linkTarget, roots = defaultRoots) {
+    function fs_isEscape(linkPath, linkTarget, roots = defaultRoots) {
         // linkPath is the path of the symlink file itself
         // linkTarget is a path that the symlink points to one or more hops away
         if (!path.isAbsolute(linkPath)) {
@@ -728,6 +740,23 @@ function escapeFunction(_roots) {
             }
         }
         return false;
+    }
+    function fs_canEscape(maybeLinkPath, roots = defaultRoots) {
+        // maybeLinkPath is the path which may be a symlink
+        if (!path.isAbsolute(maybeLinkPath)) {
+            maybeLinkPath = path.resolve(maybeLinkPath);
+        }
+        for (const root of roots) {
+            // If the link is in the root check if the realPath has escaped
+            if (isSubPath(root, maybeLinkPath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return {
+        isEscape: fs_isEscape,
+        canEscape: fs_canEscape,
     };
 }
 exports.escapeFunction = escapeFunction;
