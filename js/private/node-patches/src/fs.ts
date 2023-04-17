@@ -29,6 +29,9 @@ type Dirent = any
 const _fs = require('fs')
 
 const HOP_NON_LINK = Symbol.for('HOP NON LINK')
+const HOP_NOT_FOUND = Symbol.for('HOP NOT FOUND')
+
+type HopResults = string | typeof HOP_NON_LINK | typeof HOP_NOT_FOUND
 
 export const patcher = (fs: any = _fs, roots: string[]) => {
     fs = fs || _fs
@@ -528,7 +531,7 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
         let nested: string[] = []
 
         readHopLink(maybe, function readNextHop(link) {
-            if (link === undefined) {
+            if (link === HOP_NOT_FOUND) {
                 return cb(undefined)
             }
 
@@ -561,16 +564,14 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
         })
     }
 
-    const hopLinkCache = new Map<
-        string,
-        string | undefined | typeof HOP_NON_LINK
-    >()
-    function readHopLinkSync(p: string) {
-        if (hopLinkCache.has(p)) {
-            return hopLinkCache.get(p)
+    const hopLinkCache = Object.create(null) as { [f: string]: HopResults }
+
+    function readHopLinkSync(p: string): HopResults {
+        if (hopLinkCache[p]) {
+            return hopLinkCache[p]
         }
 
-        let link: string | typeof HOP_NON_LINK
+        let link: HopResults
 
         try {
             if (origLstatSync(p).isSymbolicLink()) {
@@ -584,41 +585,38 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
         } catch (err) {
             if (err.code === 'ENOENT') {
                 // file does not exist
-                link = undefined
+                link = HOP_NOT_FOUND
             } else {
                 link = HOP_NON_LINK
             }
         }
 
-        hopLinkCache.set(p, link)
+        hopLinkCache[p] = link
         return link
     }
 
-    function readHopLink(
-        p: string,
-        cb: (l: string | typeof HOP_NON_LINK) => void
-    ) {
-        if (hopLinkCache.has(p)) {
-            return cb(hopLinkCache.get(p))
+    function readHopLink(p: string, cb: (l: HopResults) => void) {
+        if (hopLinkCache[p]) {
+            return cb(hopLinkCache[p])
         }
 
         origReadlink(p, (err: Error, link: string) => {
             if (err) {
-                let result: undefined | typeof HOP_NON_LINK
+                let result: HopResults
 
                 if ((err as any).code === 'ENOENT') {
                     // file does not exist
-                    result = undefined
+                    result = HOP_NOT_FOUND
                 } else {
                     result = HOP_NON_LINK
                 }
 
-                hopLinkCache.set(p, result)
+                hopLinkCache[p] = result
                 return cb(result)
             }
 
             if (link === undefined) {
-                hopLinkCache.set(p, HOP_NON_LINK)
+                hopLinkCache[p] = HOP_NON_LINK
                 return cb(HOP_NON_LINK)
             }
 
@@ -626,7 +624,7 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
                 link = path.resolve(path.dirname(p), link)
             }
 
-            hopLinkCache.set(p, link)
+            hopLinkCache[p] = link
             cb(link)
         })
     }
@@ -639,7 +637,7 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
         for (;;) {
             let link = readHopLinkSync(maybe)
 
-            if (link === undefined) {
+            if (link === HOP_NOT_FOUND) {
                 return escapedHop
             }
 

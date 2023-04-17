@@ -44,6 +44,7 @@ const util = require("util");
 // es modules
 const _fs = require('fs');
 const HOP_NON_LINK = Symbol.for('HOP NON LINK');
+const HOP_NOT_FOUND = Symbol.for('HOP NOT FOUND');
 const patcher = (fs = _fs, roots) => {
     fs = fs || _fs;
     // Make the original version of the library available for when access to the
@@ -490,7 +491,7 @@ const patcher = (fs = _fs, roots) => {
         let escapedHop = false;
         let nested = [];
         readHopLink(maybe, function readNextHop(link) {
-            if (link === undefined) {
+            if (link === HOP_NOT_FOUND) {
                 return cb(undefined);
             }
             if (link === HOP_NON_LINK) {
@@ -516,10 +517,10 @@ const patcher = (fs = _fs, roots) => {
             readHopLink(maybe, readNextHop);
         });
     }
-    const hopLinkCache = new Map();
+    const hopLinkCache = Object.create(null);
     function readHopLinkSync(p) {
-        if (hopLinkCache.has(p)) {
-            return hopLinkCache.get(p);
+        if (hopLinkCache[p]) {
+            return hopLinkCache[p];
         }
         let link;
         try {
@@ -536,40 +537,40 @@ const patcher = (fs = _fs, roots) => {
         catch (err) {
             if (err.code === 'ENOENT') {
                 // file does not exist
-                link = undefined;
+                link = HOP_NOT_FOUND;
             }
             else {
                 link = HOP_NON_LINK;
             }
         }
-        hopLinkCache.set(p, link);
+        hopLinkCache[p] = link;
         return link;
     }
     function readHopLink(p, cb) {
-        if (hopLinkCache.has(p)) {
-            return cb(hopLinkCache.get(p));
+        if (hopLinkCache[p]) {
+            return cb(hopLinkCache[p]);
         }
         origReadlink(p, (err, link) => {
             if (err) {
                 let result;
                 if (err.code === 'ENOENT') {
                     // file does not exist
-                    result = undefined;
+                    result = HOP_NOT_FOUND;
                 }
                 else {
                     result = HOP_NON_LINK;
                 }
-                hopLinkCache.set(p, result);
+                hopLinkCache[p] = result;
                 return cb(result);
             }
             if (link === undefined) {
-                hopLinkCache.set(p, HOP_NON_LINK);
+                hopLinkCache[p] = HOP_NON_LINK;
                 return cb(HOP_NON_LINK);
             }
             if (!path.isAbsolute(link)) {
                 link = path.resolve(path.dirname(p), link);
             }
-            hopLinkCache.set(p, link);
+            hopLinkCache[p] = link;
             cb(link);
         });
     }
@@ -579,7 +580,7 @@ const patcher = (fs = _fs, roots) => {
         let escapedHop = false;
         for (;;) {
             let link = readHopLinkSync(maybe);
-            if (link === undefined) {
+            if (link === HOP_NOT_FOUND) {
                 return escapedHop;
             }
             if (link !== HOP_NON_LINK) {
