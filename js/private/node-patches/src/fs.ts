@@ -579,6 +579,10 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
         p: string,
         cb: (l: string | typeof HOP_NON_LINK) => void
     ) {
+        if (hopLinkCache.has(p)) {
+            return cb(hopLinkCache.get(p))
+        }
+
         origReadlink(p, (err: Error, link: string) => {
             if (err) {
                 if ((err as any).code === 'ENOENT') {
@@ -586,10 +590,12 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
                     return cb(undefined)
                 }
 
+                hopLinkCache.set(p, HOP_NON_LINK)
                 return cb(HOP_NON_LINK)
             }
 
             if (link === undefined) {
+                hopLinkCache.set(p, HOP_NON_LINK)
                 return cb(HOP_NON_LINK)
             }
 
@@ -597,6 +603,7 @@ export const patcher = (fs: any = _fs, roots: string[]) => {
                 link = path.resolve(path.dirname(p), link)
             }
 
+            hopLinkCache.set(p, link)
             cb(link)
         })
     }

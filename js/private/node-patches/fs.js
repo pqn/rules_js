@@ -532,20 +532,26 @@ const patcher = (fs = _fs, roots) => {
         return link;
     }
     function readHopLink(p, cb) {
+        if (hopLinkCache.has(p)) {
+            return cb(hopLinkCache.get(p));
+        }
         origReadlink(p, (err, link) => {
             if (err) {
                 if (err.code === 'ENOENT') {
                     // file does not exist
                     return cb(undefined);
                 }
+                hopLinkCache.set(p, HOP_NON_LINK);
                 return cb(HOP_NON_LINK);
             }
             if (link === undefined) {
+                hopLinkCache.set(p, HOP_NON_LINK);
                 return cb(HOP_NON_LINK);
             }
             if (!path.isAbsolute(link)) {
                 link = path.resolve(path.dirname(p), link);
             }
+            hopLinkCache.set(p, link);
             cb(link);
         });
     }
