@@ -28,15 +28,17 @@ type Entries = { [path: string]: Entry }
 
 type Compression = 'gzip' | 'none'
 
-function findKeyByValue(entries: Entries, value: string): string {
+function findKeyByValue(entries: Entries, value: string): string | undefined {
     for (const [key, { dest: val }] of Object.entries(entries)) {
         if (val == value) {
             return key
         }
     }
-    throw new Error(
-        `couldn't map ${value} to a path. please file a bug at https://github.com/aspect-build/rules_js/issues/new/choose`
-    )
+    return undefined
+}
+
+function isOutOfExecroot(p: string) {
+    return !p.startsWith(process.env.JS_BINARY__EXECROOT!)
 }
 
 async function* walk(dir: string, accumulate = '') {
@@ -237,14 +239,26 @@ export async function build(
         }
 
         const realp = await realpath(dest)
-        const output_path = realp.slice(realp.indexOf(root))
-        if (output_path != dest) {
+        // it's important that we don't treat any symlink pointing out of execroot since
+        // bazel symlinks external files into sandbox to make them available to us.
+        if (realp != dest && !isOutOfExecroot(realp)) {
+            const output_path = realp.slice(realp.indexOf(root))
             // interestingly, bazel 5 and 6 sets different mode bits on symlinks.
             // well use `0o755` to allow owner&group to `rwx` and others `rx`
             // see: https://chmodcommand.com/chmod-775/
             // const stats = await stat(dest)
             const stats: HermeticStat = { mode: MODE_FOR_SYMLINK, mtime: MTIME }
             const linkname = findKeyByValue(entries, output_path)
+            if (linkname == undefined) {
+                throw new Error(
+                    `Couldn't map ${output_path} to a path. please file a bug at https://github.com/aspect-build/rules_js/issues/new/choose\n\n` +
+                        `dest: ${dest}\n` +
+                        `realpath: ${realp}\n` +
+                        `outputpath: ${output_path}\n` +
+                        `root: ${root}\n` +
+                        `runfiles: ${key}\n\n`
+                )
+            }
             add_symlink(key, linkname, output, stats)
         } else {
             // Due to filesystems setting different bits depending on the os we have to opt-in

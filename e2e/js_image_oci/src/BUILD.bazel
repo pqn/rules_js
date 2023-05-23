@@ -3,12 +3,23 @@ load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@container_structure_test//:defs.bzl", "container_structure_test")
 
+filegroup(
+    name = "proto",
+    data = ["@com_google_googleapis//google/cloud/speech/v1p1beta1:speech_proto"],
+)
+
 js_binary(
     name = "main",
     args = ["foo"],
+    # skip copying so we can test external source directories
+    copy_data_to_bin = False,
     data = [
         "ascii.art",
+        ":proto",
         "//:node_modules/chalk",
+        "@repo//:dir",
+        "@repo//:source_txt",
+        "@repo//:sources",
     ],
     entry_point = "main.js",
 )
