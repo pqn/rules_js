@@ -88,7 +88,7 @@ load("@container_structure_test//:repositories.bzl", "container_structure_test_r
 
 container_structure_test_register_toolchain(name = "container_structure_test_toolchain")
 
-## Testing
+## Test repo
 local_repository(
     name = "repo",
     path = "./repo",
