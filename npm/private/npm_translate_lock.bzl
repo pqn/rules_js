@@ -69,6 +69,7 @@ _ATTRS = {
     "repositories_bzl_filename": attr.string(default = DEFAULT_REPOSITORIES_BZL_FILENAME),
     "root_package": attr.string(default = DEFAULT_ROOT_PACKAGE),
     "update_pnpm_lock": attr.bool(),
+    "update_pnpm_lock_node_toolchain_prefix": attr.string(),
     "use_home_npmrc": attr.bool(),
     "verify_node_modules_ignored": attr.label(),
     "verify_patches": attr.label(),
@@ -139,6 +140,7 @@ def npm_translate_lock(
         npm_package_lock = None,
         yarn_lock = None,
         update_pnpm_lock = None,
+        update_pnpm_lock_node_toolchain_prefix = "nodejs",
         preupdate = [],
         npmrc = None,
         use_home_npmrc = None,
@@ -210,6 +212,8 @@ def npm_translate_lock(
             Otherwise it defaults to False.
 
             Read more: [using update_pnpm_lock](/docs/pnpm.md#update_pnpm_lock)
+
+        update_pnpm_lock_node_toolchain_prefix: the prefix of the node toolchain to use when generating the pnpm lockfile.
 
         preupdate: Node.js scripts to run in this repository rule before auto-updating the pnpm lock file.
 
@@ -400,12 +404,12 @@ def npm_translate_lock(
                 out = "patches.list",
             )
             ```
-            
+
             Once you have created this file, you need to create an empty `patches.list` file before generating the first list. You can do this by running
             ```
             touch patches/patches.list
             ```
-            
+
             Finally, write the patches file at least once to make sure all patches are listed. This can be done by running `bazel run //patches:patches_update`.
 
             See the `list_patches` documentation for further info.
@@ -465,12 +469,13 @@ def npm_translate_lock(
     repositories_bzl_filename = kwargs.pop("repositories_bzl_filename", None)
     defs_bzl_filename = kwargs.pop("defs_bzl_filename", None)
     generate_bzl_library_targets = kwargs.pop("generate_bzl_library_targets", None)
+    bzlmod = kwargs.pop("bzlmod", False)
 
     if len(kwargs):
         msg = "Invalid npm_translate_lock parameter '{}'".format(kwargs.keys()[0])
         fail(msg)
 
-    if pnpm_version != None:
+    if not bzlmod and pnpm_version != None:
         _pnpm_repository(name = "pnpm", pnpm_version = pnpm_version)
 
     if package_json:
@@ -547,6 +552,7 @@ WARNING: `package_json` attribute in `npm_translate_lock(name = "{name}")` is de
         data = data,
         preupdate = preupdate,
         quiet = quiet,
+        update_pnpm_lock_node_toolchain_prefix = update_pnpm_lock_node_toolchain_prefix,
         npm_package_target_name = npm_package_target_name,
     )
 

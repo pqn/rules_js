@@ -16,6 +16,7 @@ PNPM_LOCK_FILENAME = "pnpm-lock.yaml"
 PNPM_WORKSPACE_FILENAME = "pnpm-workspace.yaml"
 PNPM_LOCK_ACTION_CACHE_PREFIX = "npm_translate_lock_"
 DEFAULT_ROOT_PACKAGE = "."
+RULES_JS_DISABLE_UPDATE_PNPM_LOCK_ENV = "ASPECT_RULES_JS_DISABLE_UPDATE_PNPM_LOCK"
 
 ################################################################################
 def _init(priv, rctx, label_store):
@@ -32,7 +33,7 @@ WARNING: `update_pnpm_lock` attribute in `npm_translate_lock(name = "{rctx_name}
 
     _init_external_repository_action_cache(priv, rctx)
 
-    _init_common_labels(rctx, label_store)
+    _init_common_labels(priv, rctx, label_store)
 
     _init_patches_labels(priv, rctx, label_store)
 
@@ -101,12 +102,14 @@ def _validate_attrs(attr, is_windows):
         fail("only one of npm_package_lock or yarn_lock may be set")
 
 ################################################################################
-def _init_common_labels(rctx, label_store):
+def _init_common_labels(priv, rctx, label_store):
     attr = rctx.attr
 
     # data files
-    for i, d in enumerate(attr.data):
-        label_store.add("data_{}".format(i), d)
+    # only initialize if update_pnpm_lock is set since data files are unused otherwise
+    if _should_update_pnpm_lock(priv):
+        for i, d in enumerate(attr.data):
+            label_store.add("data_{}".format(i), d)
 
     # lock files
     if attr.pnpm_lock:
@@ -117,9 +120,10 @@ def _init_common_labels(rctx, label_store):
         # Because label syntax for repo rules can vary, check the paths of all `data` labels
         # to see if one sits beside the pnpm lockfile
         root_package_json_path = label_store.relative_path("pnpm_lock").replace(PNPM_LOCK_FILENAME, PACKAGE_JSON_FILENAME)
-        for i in range(len(rctx.attr.data)):
-            if label_store.relative_path("data_{}".format(i)) == root_package_json_path:
-                label_store.add_sibling("lock", "package_json_root", PACKAGE_JSON_FILENAME)
+        if _should_update_pnpm_lock(priv):
+            for i in range(len(rctx.attr.data)):
+                if label_store.relative_path("data_{}".format(i)) == root_package_json_path:
+                    label_store.add_sibling("lock", "package_json_root", PACKAGE_JSON_FILENAME)
 
     else:
         if attr.npm_package_lock:
@@ -146,7 +150,7 @@ def _init_pnpm_labels(label_store, rctx):
     #
     # TODO: Try to understand this better and see if we can go back to using
     #  Label("@nodejs_host//:bin/node")
-    label_store.add("host_node", Label("@nodejs_%s//:bin/node" % repo_utils.platform(rctx)))
+    label_store.add("host_node", Label("@%s_%s//:bin/node" % (rctx.attr.update_pnpm_lock_node_toolchain_prefix, repo_utils.platform(rctx))))
 
     label_store.add("pnpm_entry", Label("@pnpm//:package/bin/pnpm.cjs"))
 
@@ -567,6 +571,11 @@ def _root_package(priv):
 def _new(rctx):
     label_store = repository_label_store.new(rctx.path)
 
+    should_update_pnpm_lock = rctx.attr.update_pnpm_lock
+    if RULES_JS_DISABLE_UPDATE_PNPM_LOCK_ENV in rctx.os.environ.keys() and rctx.os.environ[RULES_JS_DISABLE_UPDATE_PNPM_LOCK_ENV]:
+        # Force disabled update_pnpm_lock via environment variable. This is useful for some CI use cases.
+        should_update_pnpm_lock = False
+
     priv = {
         "default_registry": utils.default_registry(),
         "external_repository_action_cache": None,
@@ -577,7 +586,7 @@ def _new(rctx):
         "npm_registries": {},
         "packages": {},
         "root_package": None,
-        "should_update_pnpm_lock": rctx.attr.update_pnpm_lock,
+        "should_update_pnpm_lock": should_update_pnpm_lock,
     }
 
     _init(priv, rctx, label_store)
